@@ -1,4 +1,4 @@
-# a
+# Project of Statistical Methods in Genetics with Part 1 as a theoretical part and part 2 as a working part in R Studio code
 
 ## Part 1
 
