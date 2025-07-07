@@ -1,0 +1,265 @@
+```{r}
+library (limma)
+library (RankProd)
+```
+
+########## 2. Compiling and Normalizing the Data
+
+```{r}
+readmicroarray <- function(file) {
+  df <- read.table(file, header = TRUE)
+  colnames(df) <- c("ID", "R", "G", "Rb", "Gb")  
+  # The Art sample corresponds to the red channel and the Ven sample to the green channel.
+  return(df)
+}
+```
+
+```{r}
+c1 <- readmicroarray("chip1.txt")
+c2 <- readmicroarray("chip2.txt")
+c3 <- readmicroarray("chip3.txt")
+```
+
+```{r}
+dd <- new("RGList", list(
+  R = cbind(c1$R, c2$R, c3$R),      # Arterial (Red)
+  G = cbind(c1$G, c2$G, c3$G),      # Venous (Green)
+  Rb = cbind(c1$Rb, c2$Rb, c3$Rb),  # Background (Red)
+  Gb = cbind(c1$Gb, c2$Gb, c3$Gb),  # Background (Green)
+  genes = data.frame(ID = c1$ID)     # Preserve gene IDs
+))
+```
+
+```{r}
+colnames(dd$R) <- colnames(dd$G) <- colnames(dd$Rb) <- colnames(dd$Gb) <- c("c1", "c2", "c3") 
+```
+
+```{r}
+dd_corrected <- backgroundCorrect(dd, method="normexp")
+```
+
+```{r}
+MA.raw <- normalizeWithinArrays(dd, method="none")
+```
+
+```{r}
+MA.with <- normalizeWithinArrays(dd_corrected,method="loess") 
+```
+
+```{r}
+
+par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))  
+
+
+boxplot(MA.raw$M ~ col(MA.raw$M),
+        main = "No Normalization",
+        xlab = "chip",
+        ylab = "M-values",
+        ylim = c(-6, 6),  # Set consistent y-axis for comparison
+        col = c("lightblue", "salmon", "lightgreen"),
+        names = c("c1", "c2", "c3"),
+        outline = TRUE)  
+
+boxplot(MA.with$M ~ col(MA.with$M),
+        main = "LOESS method",
+        xlab = "Patient",
+        ylab = "M-values",
+        ylim = c(-6, 6),  # Same scale as raw plot
+        col = c("lightblue", "salmon", "lightgreen"),
+        names = c("c1", "c2", "c3"),
+        outline = TRUE)
+
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+par(mfrow = c(2, 4), mar = c(4, 4, 3, 1))
+
+# MA-plot for Patient 1 (c1)
+plotMA(MA.raw, array = 1, main = "chip 1 (Raw)")
+plotMA(MA.raw, array = 2, main = "chip 2 (Raw)")
+plotMA(MA.raw, array = 3, main = "chip 3 (Raw)")
+
+# MA-plot for Patient 2 (c2)
+plotMA(MA.raw, main = "Combined (Raw)")
+plotMA(MA.with, array = 1, main = "chip 1 (LOESS)")
+
+
+# Combined MA-plot (All patients)
+plotMA(MA.with, array = 2, main = "chip 2 (LOESS)")
+plotMA(MA.with, array = 3, main = "chip 3 (LOESS)")
+plotMA(MA.with, main = "Combined (LOESS)")
+
+par(mfrow = c(1, 1))
+```
+
+```{r}
+MA.bet2 <- normalizeBetweenArrays(MA.with, method="scale")
+
+boxplot(MA.bet2$M,names=colnames(MA.bet2$M),col=c("lightblue", "salmon", "lightgreen"))
+```
+
+########## 3. Applying the Bayesian Method of Lonnstedt and Speed
+
+```{r}
+#dim(MA.bet2$M)  
+
+design <- model.matrix(~ 0 + factor(rep(1:3, each=2)))  
+colnames(design) <- c("Patient1", "Patient2", "Patient3")
+
+fit <- lmFit(MA.bet2)  
+fit <- eBayes(fit)
+
+top_genes <- topTable(fit, adjust.method = "BH", number = Inf)
+```
+
+```{r}
+table1 <- topTable(fit, adjust.method="BH", sort.by="B", number=100)
+table1
+
+```
+
+```{r}
+volcanoplot(fit,highlight=100, main="Volcano Plot - Genes with Highest Differential Expression", cex=0.3) 
+
+library(ggrepel)  # Prevents label overlap
+
+top_genes <- table1[order(table1$adj.P.Val)[1:100], ]
+
+top_genes_right <- subset(top_genes, logFC > 0)
+
+# Plot with labels only on the right 
+ggplot(table1, aes(x = logFC, y = -log10(P.Value))) +
+  geom_point(color = "gray", alpha = 0.5) +
+  geom_point(data = subset(table1, adj.P.Val < 0.05), 
+             color = "red", alpha = 0.5) +
+  geom_text_repel(
+    data = top_genes_right,  
+    aes(label = rownames(top_genes_right)),
+    size = 5,
+    box.padding = 0.5,       
+    nudge_x = 0.1,           
+    direction = "y",         
+    segment.color = "grey50" 
+  ) +
+  labs(title = "Volcano Plot (Labels on Right Side Only)") +
+  theme_minimal()
+
+
+
+top_genes_left <- subset(top_genes, logFC < 0)  
+
+# Plot with labels only on the left
+ggplot(table1, aes(x = logFC, y = -log10(P.Value))) +
+  geom_point(color = "gray", alpha = 0.5) +
+  geom_point(data = subset(table1, adj.P.Val < 0.05), 
+             color = "red", alpha = 0.5) +
+  geom_text_repel(
+    data = top_genes_left,  
+    aes(label = rownames(top_genes_left)),
+    size = 5,
+    box.padding = 0.5,      
+    nudge_x = -0.1,          
+    direction = "y",         
+    segment.color = "grey50"  
+  ) +
+  labs(title = "Volcano Plot (Labels on Left Side Only)") +
+  theme_minimal()
+
+```
+
+```{r}
+# Plot gene-wise variances before/after moderation
+plotSA(fit, main = "Variance Shrinkage via Empirical Bayes")
+```
+
+########## 4. Applying the Moderated t-statistic
+
+```{r}
+table2 <- topTable(fit, adjust.method="BH", resort.by="t", number=100) 
+table2
+
+```
+
+########## 5. Applying the Rank Product Method
+
+```{r}
+aa <- RP(MA.bet2$M, cl = c(1,1,1)) 
+Best_genes_RP <- topGene(aa, cutoff = 0.6, method = "pfp")
+Best_genes_RP
+
+#Even though Rank Product results in 12 genes, we will only be considering Table2 moving forward as the genes in Table1 have a very low FC (indicating low biological relevance) and the pfp is rather high (indicating high propensity for false positives)
+
+```
+
+```{r}
+hist(rp_result$pval[,1], breaks=50, main="P-value distribution", xlab="P-value")  
+
+```
+
+```{r}
+limma_genes <- as.numeric(rownames(table1))
+rp_genes <- c(Best_genes_RP$Table1[,"gene.index"], Best_genes_RP$Table2[,"gene.index"])
+
+overlap <- intersect(limma_genes, rp_genes)
+limma_only <- setdiff(limma_genes, rp_genes)
+rp_only <- setdiff(rp_genes, limma_genes)
+
+cat("=== Genes Identified by Both Methods ===\n",
+    "Limma genes:", length(limma_genes), "\n",
+    "RankProd genes:", length(rp_genes), "\n",
+    "Overlap:", length(overlap), "\n",
+    "Limma only:", length(limma_only), "\n",
+    "RankProd only:", length(rp_only), "\n",
+    "Total unique:", length(union(limma_genes, rp_genes)), "\n\n",
+    "Overlap % (of Limma):", round(length(overlap)/length(limma_genes)*100, 1), "%\n",
+    "Overlap % (of RankProd):", round(length(overlap)/length(rp_genes)*100, 1), "%\n")
+
+
+
+if(length(overlap) > 0) {
+  if(exists("MA.bet2") && "genes" %in% names(MA.bet2)) {
+    print(head(MA.bet2$genes[overlap, ], 10))
+  }
+}
+```
+
+########## 6. Assessing Biological Relevance
+
+```{r}
+Best_genes_RP <- topGene(aa, num.gene = 100, method = "pfp") 
+Best_genes_RP
+
+```
+
+```{r}
+
+Best_genes_RP <- topGene(aa, num.gene = 100, method = "pfp")
+Best_genes_RP$Table2 <- Best_genes_RP$Table2[order(Best_genes_RP$Table2[,3], decreasing = TRUE), ]
+Best_genes_RP
+```
+
+```{r}
+barplot(Best_genes_RP$Table2[1:15,3], 
+        names.arg=paste0("Id", Best_genes_RP$Table2[1:15,1]),
+        las=2, main="Top 15 Genes: Fold Changes (Arterial/Venous)",
+        ylab="Fold Change", col="steelblue")
+abline(h=10, col="red", lty=2)
+```
+
+########## 7. Conclusion
+
+```{r}
+install.packages("eulerr")
+library(eulerr)
+fit <- euler(c("Bayesian statistic" = 100, "Bayesian statistic&t-statistic" = 0, "t-statistic" = 100))
+plot(fit, fills = c("skyblue", "orange"), quantities = TRUE)
+```
+
+```{r}
+
+
+fit <- euler(c("Limma" = 95, "RP" = 7, "Limma&RP" = 5))
+plot(fit, fills = c("skyblue", "orange"), quantities = TRUE)
+```
