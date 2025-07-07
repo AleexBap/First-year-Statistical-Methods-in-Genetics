@@ -1,1 +1,12 @@
-# First-year-Statistical-Methods-in-Genetics
+# a
+
+## Part 1
+
+This research investigates the use of Hidden Markov Models (HMMs) to analyze protein secondary structures derived from amino acid sequences. Concentrating on three structural states—α-helix, β-sheet, and coil—we develop a probabilistic model that encapsulates the stochastic characteristics of protein folding. The hidden states of the Markov chain signify structural motifs, while the observable signals relate to the 20 natural amino acids. By utilizing known initial conditions, we establish the initial distribution, transition probabilities among structural states, and emission probabilities for each amino acid. The model's dynamics are further analyzed concerning stationarity, irreducibility, and reversibility. Our results indicate that the chain is irreducible and approaches a stationary distribution, although it is neither initially stationary nor reversible. This methodology illustrates the effectiveness of HMMs in elucidating the structural organization of proteins and enhances the broader comprehension of sequence–structure relationships within computational biology.
+
+## Part 2
+
+This research examines the differential expression of genes in human saphenous vein tissue exposed to both arterial and venous flow conditions, which is crucial for comprehending complications associated with vein grafts after coronary artery bypass surgery.
+Utilizing microarray data from three patients, we implement and evaluate three statistical techniques—Lönnstedt and Speed's Bayesian method, the moderated t-statistic, and the Rank Product approach—to pinpoint genes linked to inflammatory and vascular responses.
+The preprocessing of data included background correction and normalization through the LIMMA package to facilitate dependable comparisons across samples. Although the sample size is limited, the empirical Bayes framework of LIMMA enabled variance stabilization, thereby improving the detection of subtle changes in expression.
+The Rank Product method offered additional insights by emphasizing genes that were consistently modified across replicates. Cross-validation demonstrated both overlapping and distinct gene sets among the methods, with a central group of five genes identified as biologically significant. These results aid in the identification of potential biomarkers and therapeutic targets aimed at enhancing graft success rates and promoting vascular healing.
